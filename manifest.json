@@ -10,7 +10,7 @@
         "tabs",
         "activeTab",
         "scripting",
-        "webNavegation",
+        "webNavigation",
         "storage",
         "notifications"
     ],
@@ -24,7 +24,7 @@
         "service_worker": "background.js",
         "type": "module"
     },
-    "web_accesible_resources": [
+    "web_accessible_resources": [
         {
             "resources": ["fonts/*.woff2", "fonts/*.woff"],
             "matches": ["<all_urls>"],
