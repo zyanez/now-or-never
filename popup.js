@@ -6,8 +6,32 @@ document.addEventListener("DOMContentLoaded", () => {
     const sessionTypeEl = document.getElementById("sessionType");
     const statusBtn = document.getElementById("statusBtn");
     const startPauseIcon = startPauseButton.querySelector("img");
+    const toggleAntiProcrastination = document.getElementById(
+        "toggleAntiProcastination"
+    );
     let pomodoroRunning = false;
-    
+
+    chrome.storage.local.get(
+        { antiProcrastinationEnabled: false },
+        (result) => {
+            toggleAntiProcrastination.checked =
+                result.antiProcrastinationEnabled;
+        }
+    );
+
+    toggleAntiProcrastination.addEventListener("change", (event) => {
+        const enabled = event.target.checked;
+        chrome.storage.local.set(
+            { antiProcrastinationEnabled: enabled },
+            () => {
+                chrome.runtime.sendMessage({
+                    action: "toggleAntiProcrastination",
+                    enabled,
+                });
+            }
+        );
+    });
+
     chrome.runtime.sendMessage({ action: "getPomodoroState" }, (state) => {
         if (state) {
             pomodoroRunning = state.enabled;
