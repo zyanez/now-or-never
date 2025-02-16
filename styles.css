@@ -1,0 +1,145 @@
+:root {
+    --slate-50: #f8fafc;
+    --slate-100: #F1F5F9;
+    --slate-200: #e2e8f0;
+    --slate-600: #475569;
+    --slate-700: #334155;
+    --slate-800: #1e293b;
+    --slate-900: #0f172a;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: white;
+    color: var(--slate-800);
+    line-height: 1.5;
+}
+
+.container {
+    width: 320px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.title {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    color: var(--slate-900);
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    font-size: 14px;
+    color: var(--slate-600);
+}
+
+.main-content {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.pomodoroContainer {
+    text-align: center;
+}
+
+.section-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--slate-900);
+    margin-bottom: 12px;
+}
+
+.sessionType {
+    font-size: 16px;
+    color: var(--slate-600);
+    margin-bottom: 16px;
+}
+
+.pomodoroDisplay {
+    margin-bottom: 20px;
+}
+
+.progress-container {
+    width: 100%;
+    height: 4px;
+    background-color: var(--slate-200);
+    border-radius: 2px;
+    margin-bottom: 16px;
+}
+
+.progress-bar {
+    width: 0;
+    height: 100%;
+    background-color: var(--slate-700);
+    border-radius: 2px;
+    transition: width 1s linear;
+}
+
+.pomodoroTime {
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--slate-900);
+    letter-spacing: -0.025em;
+}
+
+.button-container {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.icon {
+    width: 16px;
+    flex-shrink: 0;
+    height: 16px;
+}
+
+.btn-primary {
+    background-color: var(--slate-800);
+    color: white;
+    border: none;
+}
+
+.btn-primary:hover {
+    background-color: var(--slate-900);
+}
+
+.btn-secondary {
+    background-color: white;
+    color: var(--slate-700);
+    border: 1px solid var(--slate-200);
+}
+
+.btn-secondary:hover {
+    background-color: var(--slate-100);
+}
