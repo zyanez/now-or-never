@@ -4,12 +4,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const pomodoroBar = document.getElementById("pomodoroBar");
     const pomodoroTime = document.getElementById("pomodoroTime");
     const sessionTypeEl = document.getElementById("sessionType");
+    const statusBtn = document.getElementById("statusBtn");
+    const startPauseIcon = startPauseButton.querySelector("img");
     let pomodoroRunning = false;
     
     chrome.runtime.sendMessage({ action: "getPomodoroState" }, (state) => {
         if (state) {
             pomodoroRunning = state.enabled;
-            startPauseButton.textContent = pomodoroRunning ? "Pause" : "Start";
+            startPauseIcon.src = pomodoroRunning
+                ? "assets/pause.svg"
+                : "assets/play.svg";
+            startPauseIcon.alt = pomodoroRunning ? "Pause Icon" : "Play Icon";
 
             if (state.mode === "focus") {
                 sessionTypeEl.textContent = "Focus Session";
@@ -43,19 +48,25 @@ document.addEventListener("DOMContentLoaded", () => {
     startPauseButton.addEventListener("click", () => {
         if (pomodoroRunning) {
             chrome.runtime.sendMessage({ action: "stopPomodoro" });
-            startPauseButton.textContent = "Start";
+            statusBtn.textContent = "Start";
             pomodoroRunning = false;
+            startPauseIcon.src = "assets/play.svg";
+            startPauseIcon.alt = "Play Icon";
         } else {
             chrome.runtime.sendMessage({ action: "startPomodoro" });
-            startPauseButton.textContent = "Pause";
+            statusBtn.textContent = "Pause";
             pomodoroRunning = true;
+            startPauseIcon.src = "assets/pause.svg";
+            startPauseIcon.alt = "Pause Icon";
         }
     });
 
     resetButton.addEventListener("click", () => {
         chrome.runtime.sendMessage({ action: "resetPomodoro" });
         pomodoroRunning = false;
-        startPauseButton.textContent = "Start";
+        statusBtn.textContent = "Start";
+        startPauseIcon.src = "assets/play.svg";
+        startPauseIcon.alt = "Play Icon";
     });
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -86,8 +97,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 .toString()
                 .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
             pomodoroBar.style.width = "0%";
-            startPauseButton.textContent = "Start";
+            statusBtn.textContent = "Start";
             pomodoroRunning = false;
+            startPauseIcon.src = "assets/play.svg";
+            startPauseIcon.alt = "Play Icon";
         }
     });
 });
