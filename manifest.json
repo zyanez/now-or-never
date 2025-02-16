@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Now Or Never",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "description": "Chrome Extension that helps you overcome procrastination and boost your productivity.",
     "action":{
         "default_popup": "popup.html"
@@ -12,6 +12,7 @@
         "scripting",
         "webNavigation",
         "storage",
+        "alarms",
         "notifications"
     ],
     "icons": {
