@@ -5,8 +5,7 @@ import {
     getPomodoroState,
 } from "./background/pomodoroManager.js";
 import {
-    clearOverlayAndResetStyles,
-    applyWillOverlay,
+    applyWillOverlay
 } from "./background/overlayManager.js";
 import { isDistractingDomain } from "./background/domainChecker.js";
 import { autoFocusTasks } from "./background/autoFocusManager.js";
