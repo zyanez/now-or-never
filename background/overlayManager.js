@@ -74,10 +74,11 @@ function applyWillOverlay() {
     const overlay = document.createElement("div");
     overlay.id = "will-overlay";
     overlay.innerHTML = `
-        <h1>Are you sure you want to enter this page?</h1>
-        <p>You should be focusing right now!</p>
+        <h1>Is this really worth your time?</h1>
+        <p>A few minutes of entertainment won't change your life, but staying focused on your goals will.</p>
+        <p>Every moment you invest in productivity is a step toward a better future. Are you sure you want to get distracted?</p>
         <button id="only5min">Just 5 min</button>
-        <button id="backFocus">Back to Focus</button>`;
+        <button id="backFocus">Stay on Track</button>`;
     document.body.appendChild(overlay);
     document.getElementById("only5min").addEventListener("click", function () {
         const currentTime = Date.now();
