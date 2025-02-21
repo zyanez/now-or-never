@@ -4,209 +4,195 @@ import {
     resetPomodoroCycle,
     getPomodoroState,
 } from "./background/pomodoroManager.js";
-import {
-    applyWillOverlay
-} from "./background/overlayManager.js";
+import { applyWillOverlay } from "./background/overlayManager.js";
 import { isDistractingDomain } from "./background/domainChecker.js";
 import { autoFocusTasks } from "./background/autoFocusManager.js";
-import thresholdMessages from './messages.js';
+import thresholdMessages from "./messages.js";
+
+const storage = {
+    get: (keys) =>
+        new Promise((resolve) => chrome.storage.local.get(keys, resolve)),
+    set: (data) =>
+        new Promise((resolve) => chrome.storage.local.set(data, resolve)),
+};
 
 let cachedSiteTimers = {};
 let flushTimer = null;
-
-chrome.storage.local.get("siteTimers", (data) => {
-    cachedSiteTimers = data.siteTimers || {};
-});
-
-function flushSiteTimers(){
-    chrome.storage.local.set({siteTimers: cachedSiteTimers}, () => {
-        if (chrome.runtime.lastError){
-            console.error("Error updating timers:",chrome.runtime.lastError);
-        }
-    });
-    flushTimer = null;
-}
-
-function scheduleFlush(){
-    if (!flushTimer){
-        flushTimer = setTimeout(flushSiteTimers, 1000);
-    }
-}
-
-function updateSiteTimers(hostname, elapsed){
-    cachedSiteTimers[hostname] = (cachedSiteTimers[hostname] || 0) + elapsed;
-    scheduleFlush();
-}
-
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === "getPomodoroState") {
-        sendResponse(getPomodoroState());
-    } else if (message.action === "createFiveMinuteTimer") {
-        const alarmName = `fiveMinTimer_${Date.now()}`;
-        chrome.alarms.create(alarmName, { delayInMinutes: 5 });
-        chrome.storage.local.set({ [alarmName]: message.url });
-    } else if (message.action === "backToFocus") {
-        autoFocusTasks();
-    } else if (message.action === "toggleAntiProcrastination") {
-        chrome.storage.local.set({
-            antiProcrastinationEnabled: message.enabled,
-        });
-    } else if (message.action === "startPomodoro") {
-        startPomodoroCycle();
-    } else if (message.action === "stopPomodoro") {
-        stopPomodoroCycle();
-    } else if (message.action === "resetPomodoro") {
-        resetPomodoroCycle();
-    }
-});
-
-chrome.webNavigation.onCompleted.addListener((details) => {
-    if (details.url.startsWith("chrome://") || details.url === "about:newtab") return;
-
-    chrome.storage.local.get(["temporaryAccess"], (result) => {
-        const pomodoroState = getPomodoroState();
-        if (pomodoroState.enabled && pomodoroState.mode === "focus") {
-            const temporaryAccess = result.temporaryAccess;
-            const currentTime = Date.now();
-            if (
-                !temporaryAccess ||
-                temporaryAccess.url !== details.url ||
-                temporaryAccess.expiresAt < currentTime
-            ) {
-                chrome.tabs.get(details.tabId, (tab) => {
-                    if (chrome.runtime.lastError || !tab.url) return;
-                    const currentHostname = new URL(tab.url).hostname;
-                    if (isDistractingDomain(tab.url)) {
-                        chrome.scripting.executeScript({
-                            target: { tabId: details.tabId },
-                            function: applyWillOverlay,
-                        });
-                    }
-                });
-            }
-        }
-    });
-});
-
-chrome.alarms.create("progressCheck", { periodInMinutes: 5 });
-
-chrome.runtime.onInstalled.addListener(() => {
-    chrome.storage.local.set({
-        pomodoroEnabled: false,
-        antiProcrastinationEnabled: false,
-        temporaryAccess: null,
-        siteTimers: {},
-    });
-});
-
 let distractingStartTime = null;
 let currentDistractingUrl = null;
 
+const FLUSH_DELAY = 1000;
+const CHECK_INTERVAL = 0.1;
 
-function getRandomMessage(threshold) {
-    const messages = thresholdMessages[threshold];
-    if (messages && messages.length) {
-      const index = Math.floor(Math.random() * messages.length);
-      return messages[index];
+const isInternalURL = (url) =>
+    url.startsWith("chrome://") || url === "about:newtab";
+
+const getHostname = (url) => {
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return null;
     }
-    return "";
-}
+};
 
-async function checkDistractingTime() {
+const flushSiteTimers = () => {
+    storage
+        .set({ siteTimers: cachedSiteTimers })
+        .catch((error) => console.error("Error updating timers:", error));
+    flushTimer = null;
+};
 
-    const {antiProcrastinationEnabled} = await new Promise((resolve) =>
-        chrome.storage.local.get(["antiProcrastinationEnabled"], resolve)
-    );
+const scheduleFlush = () => {
+    if (!flushTimer) flushTimer = setTimeout(flushSiteTimers, FLUSH_DELAY);
+};
 
-    if (!antiProcrastinationEnabled){
-        distractingStartTime = null;
-        currentDistractingUrl = null;
-        return;
-    }
+const updateSiteTimers = async (hostname, elapsed) => {
+    if (!hostname) return;
 
-    const tabs = await new Promise((resolve) => 
-        chrome.tabs.query({active: true, currentWindow: true}, resolve)
-    );
+    cachedSiteTimers[hostname] = (cachedSiteTimers[hostname] || 0) + elapsed;
+    scheduleFlush();
 
-    if (!tabs || !tabs[0] || !tabs[0].url){
-        distractingStartTime = null;
-        currentDistractingUrl = null;
-        return;
-    }
+    const thresholds = Object.keys(thresholdMessages)
+        .map(Number)
+        .sort((a, b) => b - a);
 
-    let parsedUrl;
-    try{
-        parsedUrl = new URL(tabs[0].url);
-    } catch (error) {
-        distractingStartTime = null;
-        currentDistractingUrl = null;
-        return;
-    }
+    for (const threshold of thresholds) {
+        const thresholdMs = threshold * 60 * 1000;
+        const notificationKey = `${hostname}_notified_${threshold}`;
 
-    if (parsedUrl.protocol === "chrome:" || parsedUrl.hostname==="newtab"){
-        distractingStartTime = null;
-        currentDistractingUrl = null;
-        return;
-    }
-
-    if (isDistractingDomain(tabs[0].url)){
-        const hostname = parsedUrl.hostname;
-        const now = Date.now();
-
-        if (!currentDistractingUrl){
-            currentDistractingUrl = hostname;
-            distractingStartTime = now;
-        } else if (currentDistractingUrl !== hostname){
-            const elapsed = now - distractingStartTime;
-            await updateSiteTimers(currentDistractingUrl, elapsed);
-            checkThresholdNotifications(currentDistractingUrl);
-            currentDistractingUrl = hostname;
-            distractingStartTime = now;
-        } else {
-            const elapsed = now - distractingStartTime;
-            await updateSiteTimers(hostname, elapsed);
-            checkThresholdNotifications(hostname);
-            distractingStartTime = now;
-        }
-    } else {
-        if (currentDistractingUrl){
-            delete cachedSiteTimers[currentDistractingUrl];
-            Object.keys(cachedSiteTimers).forEach((key) => {
-                delete cachedSiteTimers[key];
-            });
-            scheduleFlush();
-        }
-        distractingStartTime = null;
-        currentDistractingUrl = null;
-    }
-}
-
-function checkThresholdNotifications(hostname){
-    const accumulatedTime = cachedSiteTimers[hostname] || 0;
-    Object.keys(thresholdMessages).forEach((thresholdKey) => {
-        const thresholdMs = parseInt(thresholdKey, 10) * 60 * 1000;
         if (
-            accumulatedTime >= thresholdMs &&
-            !cachedSiteTimers[`${hostname}_notified_${thresholdKey}`]
-        ){
-            const message = getRandomMessage(thresholdKey);
-            chrome.notifications.create({
-                type: "basic",
-                iconUrl: "icons/icon128.png",
-                title: "Procastination Alert",
-                message: message,
-                priority: 2
-            });
-            cachedSiteTimers[`${hostname}_notified_${thresholdKey}`] = true;
-            scheduleFlush();
+            cachedSiteTimers[hostname] >= thresholdMs &&
+            !cachedSiteTimers[notificationKey]
+        ) {
+            const messages = thresholdMessages[threshold];
+            if (messages?.length) {
+                const message =
+                    messages[Math.floor(Math.random() * messages.length)];
+                chrome.notifications.create({
+                    type: "basic",
+                    iconUrl: "icons/icon128.png",
+                    title: "Procastination Alert",
+                    message,
+                    priority: 2,
+                });
+                cachedSiteTimers[notificationKey] = true;
+                scheduleFlush();
+            }
+            break;
         }
-    });
-}
+    }
+};
 
-chrome.alarms.create("distractingTimeCheck", {periodInMinutes: 0.1});
-chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === "distractingTimeCheck"){
-        checkDistractingTime();
-    } 
+const handleNavigation = async ({ tabId, url }) => {
+    if (isInternalURL(url)) return;
+
+    const [pomodoroState, { temporaryAccess }] = await Promise.all([
+        getPomodoroState(),
+        storage.get("temporaryAccess"),
+    ]);
+
+    if (!pomodoroState.enabled || pomodoroState.mode !== "focus") return;
+
+    const isValidAccess =
+        temporaryAccess?.url === url &&
+        temporaryAccess?.expiresAt >= Date.now();
+
+    if (!isValidAccess) {
+        const tab = await new Promise((resolve) =>
+            chrome.tabs.get(tabId, resolve)
+        );
+        const hostname = getHostname(tab?.url);
+
+        if (hostname && isDistractingDomain(tab.url)) {
+            chrome.scripting.executeScript({
+                target: { tabId },
+                function: applyWillOverlay,
+            });
+        }
+    }
+};
+
+const handleAlarm = async (alarm) => {
+    if (alarm.name !== "distractingTimeCheck") return;
+
+    const { antiProcrastinationEnabled } = await storage.get(
+        "antiProcrastinationEnabled"
+    );
+    if (!antiProcrastinationEnabled) {
+        distractingStartTime = null;
+        currentDistractingUrl = null;
+        return;
+    }
+
+    const [tab] = await new Promise((resolve) =>
+        chrome.tabs.query({ active: true, currentWindow: true }, resolve)
+    );
+
+    const hostname = getHostname(tab?.url);
+    if (!hostname || isInternalURL(tab.url)) {
+        distractingStartTime = null;
+        currentDistractingUrl = null;
+        return;
+    }
+
+    const now = Date.now();
+    const isDistracting = isDistractingDomain(tab.url);
+
+    if (isDistracting) {
+        if (currentDistractingUrl !== hostname) {
+            if (currentDistractingUrl) {
+                await updateSiteTimers(
+                    currentDistractingUrl,
+                    now - distractingStartTime
+                );
+            }
+            currentDistractingUrl = hostname;
+            distractingStartTime = now;
+        }
+        await updateSiteTimers(hostname, now - distractingStartTime);
+        distractingStartTime = now;
+    } else if (currentDistractingUrl) {
+        delete cachedSiteTimers[currentDistractingUrl];
+        currentDistractingUrl = null;
+        distractingStartTime = null;
+        scheduleFlush();
+    }
+};
+
+const messageHandlers = {
+    getPomodoroState: () => getPomodoroState(),
+    createFiveMinuteTimer: ({ url }) => {
+        const alarmName = `fiveMinTimer_${Date.now()}`;
+        chrome.alarms.create(alarmName, { delayInMinutes: 5 });
+        return storage.set({ [alarmName]: url });
+    },
+    backToFocus: autoFocusTasks,
+    toggleAntiProcastination: ({ enabled }) =>
+        storage.set({ antiProcrastinationEnabled: enable }),
+    startPomodoro: startPomodoroCycle,
+    stopPomodoro: stopPomodoroCycle,
+    resetPomodoro: resetPomodoroCycle,
+};
+
+chrome.runtime.onInstalled.addListener(() => {
+    storage.set({
+        pomodoroEnabled: false,
+        antiProcrastinationEnabled: false,
+        temporaryAccess: null,
+        siteTimers: {}
+    });
 });
+
+chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
+    const handler = messageHandlers[message.action];
+    if (handler){
+        Promise.resolve(handler(message))
+            .then(sendResponse)
+            .catch(console.error);
+        return true;
+    }
+});
+
+chrome.webNavigation.onCompleted.addListener(handleNavigation);
+chrome.alarms.onAlarm.addListener(handleAlarm);
+chrome.alarms.create("distractingTimeCheck", { periodInMinutes: CHECK_INTERVAL });
